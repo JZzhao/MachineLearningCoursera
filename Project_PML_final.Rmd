@@ -1,0 +1,103 @@
+---
+title: "Project Practical Machine Learning: Human Activity Recognition"
+author: "Dr. Gerhard Hellstern"
+output: html_document
+---
+### Executive Summary:
+The goal of the project is to predict the "classe" variable in the training set. Anyof the other variables may be used to predict with. A report describing how the model was built ist provided and the sample error is estimated. Finally the prediction model is used to predict 20 different test cases. 
+### Libraries
+```{r}
+library(AppliedPredictiveModeling)
+library(caret)
+library("rpart.plot")
+
+```
+
+
+### Loading the data and first cleaning
+```{r}
+alldata <- read.csv("pml-training.csv")
+evaldata<- read.csv("pml-testing.csv")
+#View(alldata)
+colnames(alldata)
+summary(alldata$classe)
+#summary(evaldata)
+```
+By explorative data analysis of the training set the following characteristic ist remarkable: There are 
+a significant number of variables which are missing (empty or NA) or not valid #DIV/0!. Basiscally
+they contain only sensible information, when the variable "new_window==Yes".
+
+It is further remarkable that these variable are all empty in the "pml-testing" dataset. For theses reasons
+I decided to eliminate these variables to reduce the complexity. Furthermore - as usual - out of "pml-training" a training and a testing set are created to estimate the out-of-sample-error.
+
+
+## Preparing the data 
+
+```{r}
+alldata<-subset(alldata,alldata$new_window=="no")
+
+set.seed(3433)
+testIndex = createDataPartition(alldata$classe, p = 0.75,list=FALSE)
+training = alldata[testIndex,]
+testing =  alldata[-testIndex,]
+
+training<-subset(training,select=c(classe,user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,num_window,roll_belt,pitch_belt,yaw_belt,total_accel_belt,gyros_belt_x,gyros_belt_y,gyros_belt_z,accel_belt_x,accel_belt_y,accel_belt_z,magnet_belt_x,magnet_belt_y,magnet_belt_z,roll_arm,pitch_arm,yaw_arm,total_accel_arm,gyros_arm_x,gyros_arm_y,gyros_arm_z,accel_arm_x,accel_arm_y,accel_arm_z,magnet_arm_x,magnet_arm_y,magnet_arm_z,roll_dumbbell,pitch_dumbbell,yaw_dumbbell,total_accel_dumbbell,gyros_dumbbell_x    ,gyros_dumbbell_y,gyros_dumbbell_z,accel_dumbbell_x,accel_dumbbell_y,accel_dumbbell_z,magnet_dumbbell_x,magnet_dumbbell_y,magnet_dumbbell_z,roll_forearm,pitch_forearm,yaw_forearm,total_accel_forearm,gyros_forearm_x,gyros_forearm_y,gyros_forearm_z,accel_forearm_x,accel_forearm_y,accel_forearm_z,magnet_forearm_x,magnet_forearm_y,magnet_forearm_z))
+
+
+testing<-subset(testing,select=c(classe,user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,num_window,roll_belt,pitch_belt,yaw_belt,total_accel_belt,gyros_belt_x,gyros_belt_y,gyros_belt_z,accel_belt_x,accel_belt_y,accel_belt_z,magnet_belt_x,magnet_belt_y,magnet_belt_z,roll_arm,pitch_arm,yaw_arm,total_accel_arm,gyros_arm_x,gyros_arm_y,gyros_arm_z,accel_arm_x,accel_arm_y,accel_arm_z,magnet_arm_x,magnet_arm_y,magnet_arm_z,roll_dumbbell,pitch_dumbbell,yaw_dumbbell,total_accel_dumbbell,gyros_dumbbell_x,gyros_dumbbell_y,gyros_dumbbell_z,accel_dumbbell_x,accel_dumbbell_y,accel_dumbbell_z,magnet_dumbbell_x,magnet_dumbbell_y,magnet_dumbbell_z,roll_forearm,pitch_forearm,yaw_forearm,total_accel_forearm,gyros_forearm_x,gyros_forearm_y,gyros_forearm_z,accel_forearm_x,accel_forearm_y,accel_forearm_z,magnet_forearm_x,magnet_forearm_y,magnet_forearm_z))
+
+evaldata<-subset(evaldata,select=c(user_name,raw_timestamp_part_1,raw_timestamp_part_2,cvtd_timestamp,num_window,roll_belt,pitch_belt,yaw_belt,total_accel_belt,gyros_belt_x,gyros_belt_y,gyros_belt_z,accel_belt_x,accel_belt_y,accel_belt_z,magnet_belt_x,magnet_belt_y,magnet_belt_z,roll_arm,pitch_arm,yaw_arm,total_accel_arm,gyros_arm_x,gyros_arm_y,gyros_arm_z,accel_arm_x,accel_arm_y,accel_arm_z,magnet_arm_x,magnet_arm_y,magnet_arm_z,roll_dumbbell,pitch_dumbbell,yaw_dumbbell,total_accel_dumbbell,gyros_dumbbell_x,gyros_dumbbell_y,gyros_dumbbell_z,accel_dumbbell_x,accel_dumbbell_y,accel_dumbbell_z,magnet_dumbbell_x,magnet_dumbbell_y,magnet_dumbbell_z,roll_forearm,pitch_forearm,yaw_forearm,total_accel_forearm,gyros_forearm_x,gyros_forearm_y,gyros_forearm_z,accel_forearm_x,accel_forearm_y,accel_forearm_z,magnet_forearm_x,magnet_forearm_y,magnet_forearm_z))
+
+```
+The structure of the problem, i.e. predict one out of five classes suggests to use a tree model 
+setup for prediction. Logistic or even linear regression seems not to be optimal.
+
+So to get a feeling of the "difficulty" of the problem, just apply the simple CART-technique:
+
+## CART Algo
+```{r}
+modelCart<-train(classe~.,method="rpart",data=training,trControl = trainControl(method = "cv"))
+print(modelCart$finalModel)
+prp(modelCart$finalModel)
+pred1<-predict(modelCart,newdata=testing,type="raw")
+CM_Cart<-confusionMatrix(pred1,testing$classe)
+CM_Cart
+```
+As can be seen in the confusion matrix, the prediction quality out-of-sample, as measured e.g. with 
+the accuracy is not overwhelming, but is also not too disappointing.
+
+As we learnt in class, random forests provide an extension of the simple CART-model:
+## Random Forest
+```{r}
+model_rf<-train(classe~.,method="rf",data=training,trControl = trainControl(method = "cv"))
+print(model_rf$finalModel)
+plot(model_rf)
+plot(model_rf$finalModel)
+##In-sample estimation
+pred_rf<-predict(model_rf,newdata=training,type="raw")
+CM_RF0<-confusionMatrix(pred_rf,training$classe)
+CM_RF0
+##Out-of sample estimation
+pred_rf<-predict(model_rf,newdata=testing,type="raw")
+CM_RF<-confusionMatrix(pred_rf,testing$classe)
+CM_RF
+```
+Both, the in-sample and the out-of-sample accuracy are remarkable good,
+so this model can be used for prediction of the evaluation data. 
+
+## Preparing the output of the evaluation data:
+```{r}
+model_final<-model_rf
+pred_final<-predict(model_final,newdata=evaldata,type="raw")
+pred_final
+pml_write_files = function(x){
+  n = length(x)
+  for(i in 1:n){
+    filename = paste0("problem_id_",i,".txt")
+    write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+  }
+}
+
+pml_write_files(pred_final)
+```
+Note: All 20 test cases of the evaluation data are predicted correctly !! 
